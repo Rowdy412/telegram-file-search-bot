@@ -1,6 +1,3 @@
-# Updated `bot.py` for Webhook Support (Render Compatible)
-
-```python
 import os
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -63,8 +60,3 @@ if __name__ == "__main__":
     WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://your-render-url.onrender.com/")
     bot.run()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-```
-
----
-
-
