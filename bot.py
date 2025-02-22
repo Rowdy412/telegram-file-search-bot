@@ -1,57 +1,70 @@
+# Updated `bot.py` for Webhook Support (Render Compatible)
+
+```python
 import os
 from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pymongo import MongoClient
-from time import sleep
+from urllib.parse import quote_plus
+from flask import Flask, request
 
 # Load environment variables
 API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-MONGO_URI = os.getenv("MONGO_URI")
+MONGO_USER = quote_plus(os.getenv("MONGO_USER"))
+MONGO_PASS = quote_plus(os.getenv("MONGO_PASS"))
+MONGO_URI = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@cinejunkies.azgr3.mongodb.net/?retryWrites=true&w=majority&appName=cinejunkies"
 
-# MongoDB connection
-client = MongoClient(MONGO_URI)
-db = client["file_search_db"]
-collection = db["files"]
+# MongoDB Connection
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client.file_db
+files_collection = db.files
 
-# Telegram Bot Client
-bot = Client("file_search_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# Flask App for Webhook
+app = Flask(__name__)
 
+# Pyrogram Bot Instance
+bot = Client(
+    "file_search_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
+)
 
-@bot.on_message(filters.document | filters.video | filters.audio)
-async def save_file(client, message):
-    """Save file details (caption + file_id) in the database."""
-    file_caption = message.caption if message.caption else "No Caption"
-    file_id = message.document.file_id if message.document else None
+# Webhook route for Telegram updates
+@app.route("/", methods=["POST"])
+def webhook():
+    if request.method == "POST":
+        update = request.get_json()
+        bot.process_update(update)
+        return "", 200
 
-    if file_id:
-        collection.insert_one({"file_id": file_id, "caption": file_caption})
-        await message.reply_text(f"✅ File saved with caption: {file_caption}")
-
-
+# Handler for search queries
 @bot.on_message(filters.text & filters.private)
 async def search_file(client, message):
-    """Search files by caption in the database and return matching files with button."""
-    query = message.text
-    result = collection.find_one({"caption": {"$regex": query, "$options": "i"}})
+    query = message.text.strip()
+    result = files_collection.find_one({"caption": {"$regex": query, "$options": "i"}})
 
     if result:
-        file_id = result["file_id"]
-        await message.reply_document(
-            file_id,
-            caption=f"🎬 Found: {result['caption']}",
+        file_name = result.get("caption", "File")
+        file_link = f"https://t.me/CinemaMovieTimes/{result.get('message_id')}"
+        await message.reply(
+            f"**{file_name}**",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔗 Visit Channel", url="https://t.me/CinemaMovieTimes")]]
-            ),
+                [[InlineKeyboardButton("Watch Now 🍿", url=file_link)]]
+            )
         )
     else:
-        await message.reply_text("❌ No files found for your query.")
-
+        await message.reply("⚠️ No file found with that name.")
 
 if __name__ == "__main__":
-    print("🚀 Bot is running...")
+    # Set webhook URL from environment or default
+    WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://your-render-url.onrender.com/")
     bot.run()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+```
 
-    # Keep the process alive for Render
-    while True:
-        sleep(3600)
+---
+
+
