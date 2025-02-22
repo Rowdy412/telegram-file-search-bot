@@ -101,3 +101,9 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+    # Health check endpoint for Render's GET requests
+@app.get("/")
+async def root():
+    return {"message": "🤖 Bot is running and ready to receive updates!"}
+
