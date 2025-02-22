@@ -76,10 +76,13 @@ async def search_file(client, message):
     else:
         await message.reply("❌ No file found with that name.")
 
-# Import all existing movies from the channel
+import logging
+logging.basicConfig(level=logging.INFO)
+
 @bot.on_message(filters.command("import_movies") & filters.private)
 async def import_movies(client, message):
-    await message.reply("⏳ Importing all movies from the channel... This may take a while.")
+    logging.info("✅ /import_movies command triggered.")
+    await message.reply_text("⏳ Importing all movies from the channel...")
     total_imported = 0
 
     async for msg in bot.get_chat_history(CHANNEL_USERNAME, limit=0):
