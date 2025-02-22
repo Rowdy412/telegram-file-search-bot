@@ -1,31 +1,14 @@
-import os
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message
 from pymongo import MongoClient
-from urllib.parse import quote_plus
+import os
 
-# Load environment variables
-def get_env_var(name):
-    value = os.getenv(name)
-    if not value:
-        raise ValueError(f"Environment variable {name} is missing.")
-    return value
+API_ID = int(os.environ.get("API_ID", 0))
+API_HASH = os.environ.get("API_HASH", "")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+MONGO_URI = os.environ.get("MONGO_URI", "")
+CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "")
 
-API_ID = int(get_env_var("API_ID"))
-API_HASH = get_env_var("API_HASH")
-BOT_TOKEN = get_env_var("BOT_TOKEN")
-MONGO_USER = quote_plus(get_env_var("MONGO_USER"))
-MONGO_PASS = quote_plus(get_env_var("MONGO_PASS"))
-MONGO_URI = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@cinejunkies.azgr3.mongodb.net/?retryWrites=true&w=majority&appName=cinejunkies"
-CHANNEL_LINK = "https://t.me/CinemaMovieTimes"
-CHANNEL_USERNAME = "-1001444252744"  # Replace with your channel username
-
-# MongoDB connection
-mongo_client = MongoClient(MONGO_URI)
-db = mongo_client.file_db
-files_collection = db.files
-
-# Pyrogram Bot
 bot = Client(
     "file_search_bot",
     api_id=API_ID,
@@ -33,70 +16,54 @@ bot = Client(
     bot_token=BOT_TOKEN
 )
 
-# /start command handler
+client = MongoClient(MONGO_URI)
+db = client["file_search_bot"]
+movies_collection = db["movies"]
+
 @bot.on_message(filters.command("start") & filters.private)
-async def start_command(client, message):
-    welcome_text = (
-        "👋 **Welcome to the File Search Bot!**\n\n"
-        "🔍 **How to Use:**\n"
-        "Send me any keyword, and I'll search files by caption from my database.\n\n"
-        "📁 **Example:**\n"
-        "_Send:_ `Avengers`\n"
-        "_I'll reply with:_ 🎬 *Avengers: Endgame (2019)*\n\n"
-        "👉 **Join our channel for more files:**"
-    )
+async def start(client, message: Message):
     await message.reply_text(
-        welcome_text,
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("📺 Visit Channel", url=CHANNEL_LINK)]]
-        )
+        "👋 Welcome to the File Search Bot!\n\n"
+        "🔍 *How to Use:*\n"
+        "Send me any keyword, and I'll search files by caption from my database.\n\n"
+        "📁 *Example:*\n"
+        "_Send:_ Avengers\n"
+        "_I'll reply with:_ 🎬 *Avengers: Endgame (2019)*\n\n"
+        "👉 Join our channel for more files: @{}".format(CHANNEL_USERNAME),
+        parse_mode="markdown"
     )
-
-# File saving handler
-@bot.on_message(filters.channel & filters.document)
-async def save_file(client, message):
-    file_caption = message.caption or message.document.file_name
-    file_id = message.document.file_id
-    files_collection.insert_one({"caption": file_caption, "file_id": file_id})
-    print(f"✅ Saved file with caption: {file_caption}")
-
-# File searching handler
-@bot.on_message(filters.private & filters.text)
-async def search_file(client, message):
-    query = message.text.strip()
-    result = files_collection.find_one({"caption": {"$regex": query, "$options": "i"}})
-
-    if result:
-        await message.reply_document(
-            result["file_id"],
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("📺 Visit Channel", url=CHANNEL_LINK)]]
-            )
-        )
-    else:
-        await message.reply("❌ No file found with that name.")
-
-import logging
-logging.basicConfig(level=logging.INFO)
 
 @bot.on_message(filters.command("import_movies") & filters.private)
-async def import_movies(client, message):
-    logging.info("✅ /import_movies command triggered.")
-    await message.reply_text("⏳ Importing all movies from the channel...")
-    total_imported = 0
+async def import_movies(client, message: Message):
+    await message.reply("⏳ Importing movies from the channel...")
+    try:
+        async for msg in client.get_chat_history(CHANNEL_USERNAME, limit=0):
+            if msg.document:
+                movie_data = {
+                    "file_id": msg.document.file_id,
+                    "file_name": msg.document.file_name,
+                    "file_size": msg.document.file_size,
+                    "caption": msg.caption or ""
+                }
+                if not movies_collection.find_one({"file_id": msg.document.file_id}):
+                    movies_collection.insert_one(movie_data)
+        await message.reply("✅ Movies imported successfully!")
+    except Exception as e:
+        await message.reply(f"❌ Error while importing: {e}")
 
-    async for msg in bot.get_chat_history(CHANNEL_USERNAME, limit=0):
-        if msg.document:
-            file_caption = msg.caption or msg.document.file_name
-            file_id = msg.document.file_id
-            if not files_collection.find_one({"file_id": file_id}):
-                files_collection.insert_one({"caption": file_caption, "file_id": file_id})
-                total_imported += 1
-                print(f"✅ Imported: {file_caption}")
+@bot.on_message(filters.text & filters.private)
+async def search_file(client, message: Message):
+    query = message.text.strip()
+    result = movies_collection.find_one({"caption": {"$regex": query, "$options": "i"}})
+    if result:
+        await message.reply_document(
+            document=result["file_id"],
+            caption=f"🎬 *{result['file_name']}*\n💾 Size: {round(result['file_size']/1024/1024, 2)} MB",
+            parse_mode="markdown"
+        )
+    else:
+        await message.reply("😔 No file found with that name. Try another keyword.")
 
-    await message.reply(f"✅ Import completed! Total movies imported: {total_imported}")
-
-# Run bot with polling
 if __name__ == "__main__":
     print("🚀 Bot is running with polling on Railway...")
     bot.run()
