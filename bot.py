@@ -18,6 +18,7 @@ MONGO_USER = quote_plus(get_env_var("MONGO_USER"))
 MONGO_PASS = quote_plus(get_env_var("MONGO_PASS"))
 MONGO_URI = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@cinejunkies.azgr3.mongodb.net/?retryWrites=true&w=majority&appName=cinejunkies"
 CHANNEL_LINK = "https://t.me/CinemaMovieTimes"
+CHANNEL_USERNAME = "https://t.me/+mp-uMTEidL1mNDll"  # Replace with your channel username
 
 # MongoDB connection
 mongo_client = MongoClient(MONGO_URI)
@@ -36,12 +37,12 @@ bot = Client(
 @bot.on_message(filters.command("start") & filters.private)
 async def start_command(client, message):
     welcome_text = (
-        "👋 **Welcome to the File Search Bot!**\\n\\n"
-        "🔍 **How to Use:**\\n"
-        "Send me any keyword, and I'll search files by caption from my database.\\n\\n"
-        "📁 **Example:**\\n"
-        "_Send:_ `Avengers`\\n"
-        "_I'll reply with:_ 🎬 *Avengers: Endgame (2019)*\\n\\n"
+        "👋 **Welcome to the File Search Bot!**\n\n"
+        "🔍 **How to Use:**\n"
+        "Send me any keyword, and I'll search files by caption from my database.\n\n"
+        "📁 **Example:**\n"
+        "_Send:_ `Avengers`\n"
+        "_I'll reply with:_ 🎬 *Avengers: Endgame (2019)*\n\n"
         "👉 **Join our channel for more files:**"
     )
     await message.reply_text(
@@ -75,7 +76,24 @@ async def search_file(client, message):
     else:
         await message.reply("❌ No file found with that name.")
 
+# Import all existing movies from the channel
+@bot.on_message(filters.command("import_movies") & filters.private)
+async def import_movies(client, message):
+    await message.reply("⏳ Importing all movies from the channel... This may take a while.")
+    total_imported = 0
+
+    async for msg in bot.get_chat_history(CHANNEL_USERNAME, limit=0):
+        if msg.document:
+            file_caption = msg.caption or msg.document.file_name
+            file_id = msg.document.file_id
+            if not files_collection.find_one({"file_id": file_id}):
+                files_collection.insert_one({"caption": file_caption, "file_id": file_id})
+                total_imported += 1
+                print(f"✅ Imported: {file_caption}")
+
+    await message.reply(f"✅ Import completed! Total movies imported: {total_imported}")
+
 # Run bot with polling
 if __name__ == "__main__":
-    print("🚀 Bot is running with polling on Render...")
+    print("🚀 Bot is running with polling on Railway...")
     bot.run()
