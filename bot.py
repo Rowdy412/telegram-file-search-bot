@@ -18,7 +18,7 @@ MONGO_USER = quote_plus(get_env_var("MONGO_USER"))
 MONGO_PASS = quote_plus(get_env_var("MONGO_PASS"))
 MONGO_URI = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@cinejunkies.azgr3.mongodb.net/?retryWrites=true&w=majority&appName=cinejunkies"
 CHANNEL_LINK = "https://t.me/CinemaMovieTimes"
-CHANNEL_USERNAME = "https://t.me/+mp-uMTEidL1mNDll"  # Replace with your channel username
+CHANNEL_USERNAME = "-1001444252744"  # Replace with your channel username
 
 # MongoDB connection
 mongo_client = MongoClient(MONGO_URI)
