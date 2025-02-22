@@ -1,5 +1,7 @@
 pyrogram
+tgcrypto
 pymongo
 dnspython
 python-dotenv
-flask
+fastapi
+uvicorn

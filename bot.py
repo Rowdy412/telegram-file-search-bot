@@ -1,30 +1,37 @@
 import os
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pymongo import MongoClient
 from urllib.parse import quote_plus
-from flask import Flask, request, jsonify
-import threading
+from fastapi import FastAPI, Request
+import uvicorn
 
-# Load environment variables
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-MONGO_USER = quote_plus(os.getenv("MONGO_USER"))
-MONGO_PASS = quote_plus(os.getenv("MONGO_PASS"))
+# Load environment variables safely
+def get_env_var(name):
+    value = os.getenv(name)
+    if not value:
+        raise ValueError(f"Environment variable {name} is missing.")
+    return value
+
+API_ID = int(get_env_var("API_ID"))
+API_HASH = get_env_var("API_HASH")
+BOT_TOKEN = get_env_var("BOT_TOKEN")
+MONGO_USER = quote_plus(get_env_var("MONGO_USER"))
+MONGO_PASS = quote_plus(get_env_var("MONGO_PASS"))
 MONGO_URI = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@cinejunkies.azgr3.mongodb.net/?retryWrites=true&w=majority&appName=cinejunkies"
 CHANNEL_LINK = "https://t.me/CinemaMovieTimes"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://your-render-url.onrender.com/")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://telegram-file-search-bot.onrender.com/")
 
 # MongoDB Connection
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client.file_db
 files_collection = db.files
 
-# Initialize Flask App for Webhook
-app = Flask(__name__)
+# FastAPI app (instead of Flask for async compatibility)
+app = FastAPI()
 
-# Initialize Pyrogram Bot
+# Pyrogram Bot Client
 bot = Client(
     "file_search_bot",
     api_id=API_ID,
@@ -32,13 +39,12 @@ bot = Client(
     bot_token=BOT_TOKEN
 )
 
-# Webhook endpoint for Telegram
-@app.route("/", methods=["POST"])
-def webhook():
-    update = request.get_json()
-    if update:
-        bot.process_update(update)
-    return jsonify({"status": "ok"}), 200
+# Endpoint for Telegram webhook
+@app.post("/")
+async def telegram_webhook(request: Request):
+    update = await request.json()
+    await bot.process_update(update)
+    return {"status": "ok"}
 
 # File saving handler
 @bot.on_message(filters.channel & filters.document)
@@ -64,10 +70,14 @@ async def search_file(client, message):
     else:
         await message.reply("❌ No file found with that name.")
 
-# Run bot and Flask server simultaneously
-def run_bot():
-    bot.run()
+# Async startup function
+async def main():
+    await bot.start()
+    print(f"🚀 Bot running at {WEBHOOK_URL}")
+    port = int(os.environ.get("PORT", 5000))
+    config = uvicorn.Config(app=app, host="0.0.0.0", port=port, log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
 
 if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    asyncio.run(main())
